@@ -1,0 +1,27 @@
+# /etc/keycard-osx-oidcd/config.toml
+#
+# Required: the externally-reachable issuer URL.
+# Must match the URL Tailscale exposes.
+issuer = "https://CHANGE-ME.tailXXXX.ts.net"
+
+# TCP listener for the public discovery surface (loopback only;
+# Tailscale terminates TLS in front of it).
+listen_http = "127.0.0.1:8080"
+
+# Unix socket for local token issuance.
+listen_uds = "/var/run/keycard-osx-oidcd.sock"
+
+# Where the signing key + rotation metadata live.
+keys_dir = "/var/db/keycard-osx-oidcd/keys"
+
+# Token defaults.
+default_ttl_seconds = 3600
+max_ttl_seconds     = 43200
+
+# Optional: restrict the audiences that may be requested.
+# Empty list means "any audience allowed".
+allowed_audiences = []
+
+# Key rotation interval and grace period.
+rotation_interval_days = 7
+previous_key_grace_hours = 24
