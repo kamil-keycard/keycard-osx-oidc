@@ -7,3 +7,16 @@
 //! - JWK thumbprint computation per RFC 7638 used as the `kid`
 //! - The `Claims` type emitted by the daemon
 //! - The sign / verify primitives that turn `Claims` into a compact JWT
+//! - The `DiscoveryDocument` served at `/.well-known/openid-configuration`
+
+mod b64;
+pub mod claims;
+pub mod discovery;
+pub mod error;
+pub mod jwk;
+pub mod jwt;
+
+pub use claims::Claims;
+pub use discovery::DiscoveryDocument;
+pub use error::{Error, Result};
+pub use jwk::{Jwk, Jwks};
