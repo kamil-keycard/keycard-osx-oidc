@@ -62,7 +62,7 @@ sudo vi /etc/keycard-osx-oidcd/config.toml
 sudo launchctl kickstart -kp system/com.keycard.osx-oidcd
 
 # Expose discovery via Tailscale
-sudo tailscale serve --bg --https=443 / http://127.0.0.1:8080
+sudo tailscale serve --bg --https=443 http://127.0.0.1:8080
 
 # Mint a token as a regular user
 keycard-osx-oidc whoami

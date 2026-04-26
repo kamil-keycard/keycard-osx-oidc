@@ -100,7 +100,7 @@ curl -s http://127.0.0.1:8080/.well-known/jwks.json | jq
 For tailnet-only access:
 
 ```bash
-sudo tailscale serve --bg --https=443 / http://127.0.0.1:8080
+sudo tailscale serve --bg --https=443 http://127.0.0.1:8080
 sudo tailscale serve status
 ```
 
@@ -108,9 +108,13 @@ For public-internet access (required for AWS STS):
 
 ```bash
 sudo tailscale serve  reset
-sudo tailscale funnel --bg --https=443 / http://127.0.0.1:8080
+sudo tailscale funnel --bg --https=443 http://127.0.0.1:8080
 sudo tailscale funnel status
 ```
+
+Note: older Tailscale docs/snippets show a `/` between the port and target URL
+(`--https=443 / http://...`). The current `serve`/`funnel` CLI rejects that
+form with "invalid usage" — the target is a single positional argument.
 
 Verify externally:
 
