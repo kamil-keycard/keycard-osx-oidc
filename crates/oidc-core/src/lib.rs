@@ -15,6 +15,7 @@ pub mod discovery;
 pub mod error;
 pub mod jwk;
 pub mod jwt;
+pub mod protocol;
 
 pub use claims::Claims;
 pub use discovery::DiscoveryDocument;
