@@ -6,7 +6,6 @@
 //! and is not given — any way to assert a different identity.
 
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
@@ -155,12 +154,3 @@ async fn build_token(
     })
 }
 
-/// Helper for tests: bind a socket, run `serve` in the background, return
-/// its path.
-#[cfg(test)]
-pub fn ensure_parent_dir(path: &Path) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    Ok(())
-}
