@@ -45,6 +45,14 @@ build_release
 echo "[install] stopping any existing daemon..."
 launchctl bootout "system/$LABEL" 2>/dev/null || true
 
+echo "[install] preparing install dirs"
+# /usr/local/sbin and even /usr/local/bin can be missing on a fresh macOS,
+# and BSD install(1) doesn't create the destination's parent directory. Make
+# sure both bin dirs exist before we drop binaries into them.
+install -d -m 0755 -o root -g wheel /usr/local/sbin
+install -d -m 0755 -o root -g wheel /usr/local/bin
+install -d -m 0755 -o root -g wheel /Library/LaunchDaemons
+
 echo "[install] installing binaries"
 install -m 0755 -o root -g wheel "$REPO_ROOT/target/release/$DAEMON_BIN_NAME" "$DAEMON_INSTALL"
 install -m 0755 -o root -g wheel "$REPO_ROOT/target/release/$CLI_BIN_NAME"    "$CLI_INSTALL"
