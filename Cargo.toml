@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/oidc-core",
+    "crates/oidcd",
+    "crates/cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/kamil-keycard/keycard-osx-oidc"
+rust-version = "1.80"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+base64 = "0.22"
+ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8", "pem"] }
+rand = "0.8"
+sha2 = "0.10"
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+hyper = "1"
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+clap = { version = "4", features = ["derive"] }
+toml = "0.8"
+libc = "0.2"
+hyper-util = { version = "0.1", features = ["server", "tokio", "service"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

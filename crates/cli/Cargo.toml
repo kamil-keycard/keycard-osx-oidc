@@ -1,0 +1,22 @@
+[package]
+name = "keycard-osx-oidc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "User-facing CLI to obtain OIDC tokens from keycard-osx-oidcd"
+
+[[bin]]
+name = "keycard-osx-oidc"
+path = "src/main.rs"
+
+[dependencies]
+oidc-core = { path = "../oidc-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+time = { workspace = true }
+libc = { workspace = true }
