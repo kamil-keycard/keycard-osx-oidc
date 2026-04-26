@@ -29,7 +29,7 @@ hyper = "1"
 tower = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 toml = "0.8"
 libc = "0.2"
 hyper-util = { version = "0.1", features = ["server", "tokio", "service"] }
