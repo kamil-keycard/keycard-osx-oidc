@@ -6,10 +6,24 @@ from .client import (
     TokenResponse,
     WhoamiResponse,
 )
+from .keycard import (
+    DEFAULT_ZONE_ID,
+    decode_jwt_unverified,
+    default_resource,
+    discover_zone,
+    exchange,
+    zone_url,
+)
 
 __all__ = [
+    "DEFAULT_ZONE_ID",
     "KeycardClient",
     "KeycardError",
     "TokenResponse",
     "WhoamiResponse",
+    "decode_jwt_unverified",
+    "default_resource",
+    "discover_zone",
+    "exchange",
+    "zone_url",
 ]

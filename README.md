@@ -140,25 +140,36 @@ refresh on `exp` to avoid forking on every API call.
 
 ### Option 3: speak the UDS protocol directly
 
-A working stdlib-only example lives at [`examples/python-whoami/`](examples/python-whoami/).
-It packages a reusable `KeycardClient` plus a demo CLI:
+A working example lives at [`examples/python-whoami/`](examples/python-whoami/).
+The UDS half is stdlib-only; the Keycard half delegates to the official
+[`keycardai-oauth`](https://pypi.org/project/keycardai-oauth/) SDK so we
+don't reimplement RFC 8414 / 8693 / 7523. Includes a `whoami`, `token`,
+`watch-cache`, and `exchange` demo CLI:
 
 ```bash
 cd examples/python-whoami
 uv run keycard-demo whoami
 uv run keycard-demo token --audience sts.amazonaws.com
 uv run keycard-demo watch-cache --audience sts.amazonaws.com
+
+# RFC 8693 token exchange against a Keycard zone
+uv run keycard-demo exchange --zone-id <zone-id>
 ```
 
 Embedding it in your own app:
 
 ```python
-from keycard_osx_oidc_demo import KeycardClient, CachedTokenProvider
+from keycard_osx_oidc_demo import KeycardClient, discover_zone, exchange
 
-client = KeycardClient()
-provider = CachedTokenProvider(client, "sts.amazonaws.com",
-                               refresh_skew_seconds=300)
-jwt = provider.get().token
+local = KeycardClient()
+metadata = discover_zone("o36mbsre94s2vlt8x5jq6nbxs0")
+subject = local.get_token(audience=metadata.token_endpoint)
+response = exchange(
+    "o36mbsre94s2vlt8x5jq6nbxs0",
+    subject_token=subject.token,
+    resource="https://o36mbsre94s2vlt8x5jq6nbxs0.keycard.cloud/events",
+)
+print(response.access_token)  # keycardai.oauth.TokenResponse
 ```
 
 Use this when you need claims/`expires_at` in-process and don't want

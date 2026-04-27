@@ -1,18 +1,21 @@
 """Tiny demo CLI showing how a Python app can use the local OIDC daemon.
 
-This is intentionally stdlib-only so it runs anywhere ``uv run keycard-demo``
-can resolve a Python interpreter. It is **not** a production library;
-treat it as a copy-paste reference for embedding ``KeycardClient`` into
-your own service.
+The Unix-socket client is stdlib-only. The Keycard token-exchange flow
+delegates to the official ``keycardai-oauth`` SDK -- this example is *not*
+trying to reimplement RFC 8414 / 8693 / 7523, only to show how to plug a
+locally-issued JWT into them.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from typing import Sequence
+
+from keycardai.oauth.exceptions import OAuthError
 
 from .client import (
     DEFAULT_REFRESH_SKEW_SECONDS,
@@ -20,6 +23,14 @@ from .client import (
     CachedTokenProvider,
     KeycardClient,
     KeycardError,
+)
+from .keycard import (
+    DEFAULT_ZONE_ID,
+    decode_jwt_unverified,
+    default_resource,
+    discover_zone,
+    exchange,
+    zone_url,
 )
 
 
@@ -77,6 +88,51 @@ def _build_parser() -> argparse.ArgumentParser:
             "Stop after N refresh cycles. 0 (default) means run until "
             "interrupted with Ctrl-C."
         ),
+    )
+
+    p_exchange = sub.add_parser(
+        "exchange",
+        help=(
+            "Mint a local JWT and exchange it at a Keycard zone for an "
+            "access token bound to the requested resource (RFC 8693)."
+        ),
+    )
+    p_exchange.add_argument(
+        "--zone-id",
+        default=os.environ.get("KEYCARD_ZONE_ID", DEFAULT_ZONE_ID),
+        help=(
+            "Zone identifier; the host becomes "
+            "https://<zone-id>.keycard.cloud. Default: %(default)s "
+            "(also overridable via KEYCARD_ZONE_ID)."
+        ),
+    )
+    p_exchange.add_argument(
+        "--resource",
+        default=None,
+        help=(
+            "Resource URL to bind the exchanged token to. "
+            "Defaults to https://<zone-id>.keycard.cloud/events."
+        ),
+    )
+    p_exchange.add_argument(
+        "--ttl-seconds",
+        type=int,
+        default=None,
+        help="TTL hint for the local JWT (capped by the daemon).",
+    )
+    p_exchange.add_argument(
+        "--no-client-assertion",
+        action="store_true",
+        help=(
+            "Do not also send the local JWT as a JWT-bearer client "
+            "assertion. Use this if your zone treats the IdP as a "
+            "public client."
+        ),
+    )
+    p_exchange.add_argument(
+        "--show-subject-jwt",
+        action="store_true",
+        help="Also print the raw local JWT before exchanging it.",
     )
 
     return parser
@@ -147,6 +203,60 @@ def cmd_watch_cache(
         return 0
 
 
+def cmd_exchange(
+    client: KeycardClient,
+    *,
+    zone_id: str,
+    resource: str | None,
+    ttl_seconds: int | None,
+    use_client_assertion: bool,
+    show_subject_jwt: bool,
+) -> int:
+    metadata = discover_zone(zone_id)
+    audience = metadata.token_endpoint
+    target_resource = resource or default_resource(zone_id)
+
+    print(
+        f"# zone:           {zone_url(zone_id)}\n"
+        f"# issuer:         {metadata.issuer}\n"
+        f"# token_endpoint: {audience}\n"
+        f"# resource:       {target_resource}",
+        file=sys.stderr,
+    )
+
+    subject = client.get_token(audience, ttl_seconds=ttl_seconds)
+    header, claims = decode_jwt_unverified(subject.token)
+    print(
+        f"# subject_kid:    {header.get('kid', '?')}\n"
+        f"# subject_sub:    {claims.get('sub', '?')}\n"
+        f"# subject_aud:    {claims.get('aud', '?')}\n"
+        f"# subject_exp_in: {subject.seconds_remaining()}s",
+        file=sys.stderr,
+    )
+    if show_subject_jwt:
+        print(f"# subject_token:  {subject.token}", file=sys.stderr)
+
+    response = exchange(
+        zone_id,
+        subject_token=subject.token,
+        resource=target_resource,
+        use_client_assertion=use_client_assertion,
+    )
+
+    print(response.access_token)
+    summary = {
+        "token_type": response.token_type,
+        "expires_in": response.expires_in,
+        "issued_token_type": response.issued_token_type,
+        "scope": response.scope,
+    }
+    print(
+        json.dumps({k: v for k, v in summary.items() if v is not None}, indent=2),
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     client = KeycardClient(socket_path=args.socket)
@@ -169,8 +279,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 refresh_skew_seconds=args.refresh_skew_seconds,
                 max_iterations=args.max_iterations,
             )
+        if args.command == "exchange":
+            return cmd_exchange(
+                client,
+                zone_id=args.zone_id,
+                resource=args.resource,
+                ttl_seconds=args.ttl_seconds,
+                use_client_assertion=not args.no_client_assertion,
+                show_subject_jwt=args.show_subject_jwt,
+            )
     except KeycardError as err:
         print(f"error: {err}", file=sys.stderr)
+        return 1
+    except OAuthError as err:
+        print(f"keycard error: {err}", file=sys.stderr)
         return 1
 
     return 2

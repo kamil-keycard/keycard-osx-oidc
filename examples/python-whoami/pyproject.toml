@@ -5,7 +5,9 @@ description = "Example Python app that mints its identity JWT by talking to keyc
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = []
+dependencies = [
+    "keycardai-oauth>=0.10.0",
+]
 
 [project.scripts]
 keycard-demo = "keycard_osx_oidc_demo.app:main"
