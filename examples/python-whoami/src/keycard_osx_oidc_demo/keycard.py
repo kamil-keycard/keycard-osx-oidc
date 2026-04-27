@@ -1,14 +1,14 @@
 """Talk to a Keycard zone using the official ``keycardai-oauth`` SDK.
 
-The hard work -- RFC 8414 discovery, RFC 8693 token exchange, RFC 7523
-JWT-bearer client assertion plumbing, error mapping -- already lives in
-``keycardai.oauth.Client``. This module only adds:
+The hard work -- RFC 8414 discovery, RFC 6749 client_credentials grant,
+RFC 7523 JWT-bearer client assertion plumbing, error mapping -- already
+lives in ``keycardai.oauth.Client``. This module only adds:
 
 * Convenience constants for Keycard zone URLs.
-* A small JWT decoder used for human-readable display of the local subject
-  token. The SDK does not expose a public JWT inspector and we never
-  verify signatures here -- this is purely for the demo CLI to print
-  what it is about to exchange.
+* A small JWT decoder used for human-readable display of the local
+  client-assertion JWT. The SDK does not expose a public JWT inspector
+  and we never verify signatures here -- this is purely for the demo
+  CLI to print what it is about to send as a client assertion.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ from keycardai.oauth.types.models import (
 
 DEFAULT_ZONE_ID = "o36mbsre94s2vlt8x5jq6nbxs0"
 
-SUBJECT_TOKEN_TYPE_JWT = "urn:ietf:params:oauth:token-type:jwt"
 CLIENT_ASSERTION_TYPE_JWT_BEARER = (
     "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 )
@@ -50,30 +49,29 @@ def discover_zone(zone_id: str) -> AuthorizationServerMetadata:
         return client.discover_server_metadata()
 
 
-def exchange(
+def request_resource_token(
     zone_id: str,
     *,
-    subject_token: str,
+    client_assertion: str,
     resource: str,
-    use_client_assertion: bool = True,
 ) -> TokenResponse:
-    """RFC 8693 token exchange via the SDK.
+    """RFC 6749 §4.4 client_credentials grant, authenticated by an
+    RFC 7523 JWT-bearer client assertion.
 
-    The same JWT is presented as both the subject token and (by default) a
-    JWT-bearer client assertion (RFC 7523). This is the workload-identity
-    pattern: one JWT proves the calling identity *and* that the calling
-    workload is a registered client. Disable client assertion if the zone
-    treats the IdP as a public client.
+    The local OIDC daemon's JWT *is* the client identity; there is no
+    separate subject token because the workload is acting on its own
+    behalf. svc-sts attests the workload via the assertion's ``iss`` /
+    ``sub`` claims (which it matches against a configured token
+    application credential) and then issues an access token bound to
+    ``resource`` (RFC 8707).
     """
     with Client(zone_url(zone_id)) as client:
         request = TokenExchangeRequest(
-            subject_token=subject_token,
-            subject_token_type=SUBJECT_TOKEN_TYPE_JWT,
+            grant_type="client_credentials",
             resource=resource,
+            client_assertion=client_assertion,
+            client_assertion_type=CLIENT_ASSERTION_TYPE_JWT_BEARER,
         )
-        if use_client_assertion:
-            request.client_assertion = subject_token
-            request.client_assertion_type = CLIENT_ASSERTION_TYPE_JWT_BEARER
         return client.exchange_token(request)
 
 

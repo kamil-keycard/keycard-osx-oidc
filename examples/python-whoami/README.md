@@ -35,10 +35,11 @@ examples/python-whoami/
 
 `client.py` is stdlib-only and copy-paste ready -- depend on nothing,
 embed it in your own service to talk to the local daemon. `keycard.py`
-is intentionally a thin wrapper: discovery (RFC 8414), token exchange
-(RFC 8693), and JWT-bearer client assertion (RFC 7523) are all done by
-the official [`keycardai-oauth`](https://pypi.org/project/keycardai-oauth/)
-SDK. We reuse it on purpose -- this example is about *plugging a
+is intentionally a thin wrapper: discovery (RFC 8414), the
+client_credentials grant (RFC 6749 §4.4), and JWT-bearer client
+assertion (RFC 7523) are all done by the official
+[`keycardai-oauth`](https://pypi.org/project/keycardai-oauth/) SDK.
+We reuse it on purpose -- this example is about *plugging a
 locally-issued JWT into the existing SDK*, not reimplementing OAuth.
 
 ## Run it
@@ -83,10 +84,9 @@ error: daemon socket not found at /var/run/keycard-osx-oidcd.sock; is keycard-os
               ↳ yields token_endpoint = https://<zone-id>.keycard.cloud/oauth/2/token
 2. mint      UDS  /var/run/keycard-osx-oidcd.sock
               ↳ daemon signs a JWT with aud = <token_endpoint>, sub bound to your uid
-3. exchange  POST <token_endpoint>
+3. issue     POST <token_endpoint>
               ↳ keycardai.oauth.Client.exchange_token(TokenExchangeRequest(
-                    subject_token            = <jwt>,
-                    subject_token_type       = urn:ietf:params:oauth:token-type:jwt,
+                    grant_type               = client_credentials,
                     resource                 = https://<zone-id>.keycard.cloud/events,
                     client_assertion         = <jwt>,
                     client_assertion_type    = urn:ietf:params:oauth:client-assertion-type:jwt-bearer,
@@ -94,24 +94,26 @@ error: daemon socket not found at /var/run/keycard-osx-oidcd.sock; is keycard-os
               ↳ Keycard returns an access_token bound to that resource.
 ```
 
-Same JWT is used as both the `subject_token` and the `client_assertion`
--- the workload-identity model: one assertion proves both *who is asking*
-and *which client is asking*. Use `--no-client-assertion` if your zone
-treats the issuer as a public client and only needs the subject.
+The local JWT is presented purely as an RFC 7523 client assertion: it
+authenticates the workload (svc-sts attests it via the matching token
+application credential configured against `iss` / `sub` in IAM) and the
+zone issues a fresh access token via the `client_credentials` grant.
+There is no subject token because the workload is acting on its own
+behalf, not delegating for some user.
 
 ## Programmatic use
 
 ```python
-from keycard_osx_oidc_demo import KeycardClient, discover_zone, exchange
+from keycard_osx_oidc_demo import KeycardClient, discover_zone, request_resource_token
 
 local = KeycardClient()
 zone_id = "o36mbsre94s2vlt8x5jq6nbxs0"
 metadata = discover_zone(zone_id)
 
-subject = local.get_token(audience=metadata.token_endpoint)
-response = exchange(
+assertion = local.get_token(audience=metadata.token_endpoint)
+response = request_resource_token(
     zone_id,
-    subject_token=subject.token,
+    client_assertion=assertion.token,
     resource=f"https://{zone_id}.keycard.cloud/events",
 )
 print(response.access_token, response.expires_in)

@@ -11,7 +11,7 @@ from .keycard import (
     decode_jwt_unverified,
     default_resource,
     discover_zone,
-    exchange,
+    request_resource_token,
     zone_url,
 )
 
@@ -24,6 +24,6 @@ __all__ = [
     "decode_jwt_unverified",
     "default_resource",
     "discover_zone",
-    "exchange",
+    "request_resource_token",
     "zone_url",
 ]

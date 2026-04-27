@@ -1,9 +1,10 @@
 """Tiny demo CLI showing how a Python app can use the local OIDC daemon.
 
-The Unix-socket client is stdlib-only. The Keycard token-exchange flow
-delegates to the official ``keycardai-oauth`` SDK -- this example is *not*
-trying to reimplement RFC 8414 / 8693 / 7523, only to show how to plug a
-locally-issued JWT into them.
+The Unix-socket client is stdlib-only. The Keycard credential-issuance
+flow delegates to the official ``keycardai-oauth`` SDK -- this example
+is *not* trying to reimplement RFC 8414 / 6749 / 7523, only to show how
+to plug a locally-issued JWT into them as an RFC 7523 client assertion
+that authenticates the workload to the zone's token endpoint.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from .keycard import (
     decode_jwt_unverified,
     default_resource,
     discover_zone,
-    exchange,
+    request_resource_token,
     zone_url,
 )
 
@@ -93,8 +94,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_exchange = sub.add_parser(
         "exchange",
         help=(
-            "Mint a local JWT and exchange it at a Keycard zone for an "
-            "access token bound to the requested resource (RFC 8693)."
+            "Mint a local JWT and present it as an RFC 7523 JWT-bearer "
+            "client assertion to a Keycard zone, obtaining an access "
+            "token bound to the requested resource via the RFC 6749 "
+            "client_credentials grant."
         ),
     )
     p_exchange.add_argument(
@@ -110,7 +113,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--resource",
         default=None,
         help=(
-            "Resource URL to bind the exchanged token to. "
+            "Resource URL to bind the issued token to. "
             "Defaults to https://<zone-id>.keycard.cloud/events."
         ),
     )
@@ -121,18 +124,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="TTL hint for the local JWT (capped by the daemon).",
     )
     p_exchange.add_argument(
-        "--no-client-assertion",
+        "--show-assertion-jwt",
         action="store_true",
-        help=(
-            "Do not also send the local JWT as a JWT-bearer client "
-            "assertion. Use this if your zone treats the IdP as a "
-            "public client."
-        ),
-    )
-    p_exchange.add_argument(
-        "--show-subject-jwt",
-        action="store_true",
-        help="Also print the raw local JWT before exchanging it.",
+        help="Also print the raw local JWT before sending it as a client assertion.",
     )
 
     return parser
@@ -209,8 +203,7 @@ def cmd_exchange(
     zone_id: str,
     resource: str | None,
     ttl_seconds: int | None,
-    use_client_assertion: bool,
-    show_subject_jwt: bool,
+    show_assertion_jwt: bool,
 ) -> int:
     metadata = discover_zone(zone_id)
     audience = metadata.token_endpoint
@@ -224,23 +217,22 @@ def cmd_exchange(
         file=sys.stderr,
     )
 
-    subject = client.get_token(audience, ttl_seconds=ttl_seconds)
-    header, claims = decode_jwt_unverified(subject.token)
+    assertion = client.get_token(audience, ttl_seconds=ttl_seconds)
+    header, claims = decode_jwt_unverified(assertion.token)
     print(
-        f"# subject_kid:    {header.get('kid', '?')}\n"
-        f"# subject_sub:    {claims.get('sub', '?')}\n"
-        f"# subject_aud:    {claims.get('aud', '?')}\n"
-        f"# subject_exp_in: {subject.seconds_remaining()}s",
+        f"# assertion_kid:    {header.get('kid', '?')}\n"
+        f"# assertion_sub:    {claims.get('sub', '?')}\n"
+        f"# assertion_aud:    {claims.get('aud', '?')}\n"
+        f"# assertion_exp_in: {assertion.seconds_remaining()}s",
         file=sys.stderr,
     )
-    if show_subject_jwt:
-        print(f"# subject_token:  {subject.token}", file=sys.stderr)
+    if show_assertion_jwt:
+        print(f"# assertion_jwt:  {assertion.token}", file=sys.stderr)
 
-    response = exchange(
+    response = request_resource_token(
         zone_id,
-        subject_token=subject.token,
+        client_assertion=assertion.token,
         resource=target_resource,
-        use_client_assertion=use_client_assertion,
     )
 
     print(response.access_token)
@@ -285,8 +277,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 zone_id=args.zone_id,
                 resource=args.resource,
                 ttl_seconds=args.ttl_seconds,
-                use_client_assertion=not args.no_client_assertion,
-                show_subject_jwt=args.show_subject_jwt,
+                show_assertion_jwt=args.show_assertion_jwt,
             )
     except KeycardError as err:
         print(f"error: {err}", file=sys.stderr)
