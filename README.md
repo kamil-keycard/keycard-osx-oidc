@@ -87,6 +87,85 @@ impersonate another user. Off-host callers can only fetch the public JWKS,
 which is exactly what verifiers need to validate tokens but cannot use to
 mint new ones.
 
+## Python integration
+
+There are two practical patterns for getting a token into a Python process.
+Pick based on lifetime and how much you control the consumer.
+
+### Option 1: file-mapped token (recommended for long-running services)
+
+Run the CLI's watch loop as a per-user `LaunchAgent` (or any supervisor).
+It writes the raw JWT — atomically, mode `0600`, no trailing newline — to
+a file you control and re-mints it before expiry:
+
+```bash
+keycard-osx-oidc token \
+  --audience sts.amazonaws.com \
+  --output "$HOME/.keycard/token" \
+  --watch \
+  --refresh-skew-seconds 300
+```
+
+The consumer just reads the file. This is intentionally compatible with
+the EKS IRSA pattern, so an existing `EKSWorkloadIdentity`-style provider
+works unchanged:
+
+```python
+from keycardai.oauth.server.credentials import EKSWorkloadIdentity
+
+provider = EKSWorkloadIdentity(
+    token_file_path=f"{os.environ['HOME']}/.keycard/token",
+)
+```
+
+A LaunchAgent template lives at `packaging/launchd/keycard-osx-oidc-token.plist.example`
+(forthcoming). The advantage: the consumer never knows about UDS, never
+forks, and crash-loops on the watcher don't take the consumer down — it
+keeps reading the last-known-good token until expiry.
+
+### Option 2: shell out to the CLI
+
+```python
+import subprocess
+
+def get_token(audience: str) -> str:
+    return subprocess.check_output(
+        ["keycard-osx-oidc", "token", "--audience", audience],
+        text=True,
+    ).strip()
+```
+
+Cheap (one UDS round trip) but you'll want to cache the result and
+refresh on `exp` to avoid forking on every API call.
+
+### Option 3: speak the UDS protocol directly
+
+A working stdlib-only example lives at [`examples/python-whoami/`](examples/python-whoami/).
+It packages a reusable `KeycardClient` plus a demo CLI:
+
+```bash
+cd examples/python-whoami
+uv run keycard-demo whoami
+uv run keycard-demo token --audience sts.amazonaws.com
+uv run keycard-demo watch-cache --audience sts.amazonaws.com
+```
+
+Embedding it in your own app:
+
+```python
+from keycard_osx_oidc_demo import KeycardClient, CachedTokenProvider
+
+client = KeycardClient()
+provider = CachedTokenProvider(client, "sts.amazonaws.com",
+                               refresh_skew_seconds=300)
+jwt = provider.get().token
+```
+
+Use this when you need claims/`expires_at` in-process and don't want
+either a sidecar (Option 1) or a subprocess fork (Option 2). The daemon
+binds identity via `getpeereid()` on the accepted fd, so the JWT you get
+back is bound to your process's UID regardless of which path you used.
+
 ## Token shape
 
 ```json
@@ -138,6 +217,7 @@ uninstall runbook.
 | `crates/oidcd/` | The `keycard-osx-oidcd` daemon binary |
 | `crates/cli/` | The `keycard-osx-oidc` user CLI binary |
 | `packaging/` | LaunchDaemon plist, install/uninstall scripts, example config |
+| `examples/python-whoami/` | Python `uv` example using the UDS protocol directly |
 
 ## License
 
