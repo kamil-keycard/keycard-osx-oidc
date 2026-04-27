@@ -143,7 +143,7 @@ refresh on `exp` to avoid forking on every API call.
 A working example lives at [`examples/python-whoami/`](examples/python-whoami/).
 The UDS half is stdlib-only; the Keycard half delegates to the official
 [`keycardai-oauth`](https://pypi.org/project/keycardai-oauth/) SDK so we
-don't reimplement RFC 8414 / 8693 / 7523. Includes a `whoami`, `token`,
+don't reimplement RFC 8414 / 6749 / 7523. Includes a `whoami`, `token`,
 `watch-cache`, and `exchange` demo CLI:
 
 ```bash
@@ -152,21 +152,24 @@ uv run keycard-demo whoami
 uv run keycard-demo token --audience sts.amazonaws.com
 uv run keycard-demo watch-cache --audience sts.amazonaws.com
 
-# RFC 8693 token exchange against a Keycard zone
+# RFC 6749 client_credentials grant against a Keycard zone, with the local
+# JWT presented as an RFC 7523 JWT-bearer client assertion.
 uv run keycard-demo exchange --zone-id <zone-id>
 ```
 
 Embedding it in your own app:
 
 ```python
-from keycard_osx_oidc_demo import KeycardClient, discover_zone, exchange
+from keycard_osx_oidc_demo import (
+    KeycardClient, discover_zone, request_resource_token,
+)
 
 local = KeycardClient()
 metadata = discover_zone("o36mbsre94s2vlt8x5jq6nbxs0")
-subject = local.get_token(audience=metadata.token_endpoint)
-response = exchange(
+assertion = local.get_token(audience=metadata.token_endpoint)
+response = request_resource_token(
     "o36mbsre94s2vlt8x5jq6nbxs0",
-    subject_token=subject.token,
+    client_assertion=assertion.token,
     resource="https://o36mbsre94s2vlt8x5jq6nbxs0.keycard.cloud/events",
 )
 print(response.access_token)  # keycardai.oauth.TokenResponse
