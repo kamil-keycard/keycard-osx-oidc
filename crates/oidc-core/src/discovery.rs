@@ -18,7 +18,7 @@ impl DiscoveryDocument {
         Self {
             issuer: issuer.to_string(),
             jwks_uri: format!("{}/.well-known/jwks.json", issuer.trim_end_matches('/')),
-            id_token_signing_alg_values_supported: vec!["EdDSA".into()],
+            id_token_signing_alg_values_supported: vec!["RS256".into()],
             subject_types_supported: vec!["public".into()],
             response_types_supported: vec!["id_token".into()],
             claims_supported: vec![

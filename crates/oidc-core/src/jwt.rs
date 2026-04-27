@@ -1,10 +1,12 @@
-//! Minimal compact-JWS signer/verifier for `EdDSA` over Ed25519.
+//! Minimal compact-JWS signer/verifier for `RS256` (RSASSA-PKCS1-v1_5 + SHA-256).
 //!
 //! We deliberately don't pull in a general-purpose JWT crate: the issuer
-//! emits exactly one shape (header is always `{alg:"EdDSA", kid, typ:"JWT"}`)
+//! emits exactly one shape (header is always `{alg:"RS256", kid, typ:"JWT"}`)
 //! and the verifier path is only used in tests.
 
-use ed25519_dalek::{Signer, Verifier};
+use rsa::pkcs1v15::{Signature, SigningKey, VerifyingKey};
+use rsa::sha2::Sha256;
+use rsa::signature::{SignatureEncoding, Signer, Verifier};
 use serde::{Deserialize, Serialize};
 
 use crate::b64;
@@ -23,7 +25,7 @@ struct Header {
 /// `header.payload.signature`.
 pub fn sign(jwk: &Jwk, claims: &Claims) -> Result<String> {
     let header = Header {
-        alg: "EdDSA".to_string(),
+        alg: "RS256".to_string(),
         kid: jwk.kid(),
         typ: "JWT".to_string(),
     };
@@ -31,15 +33,17 @@ pub fn sign(jwk: &Jwk, claims: &Claims) -> Result<String> {
     let payload_b64 = b64::encode(&serde_json::to_vec(claims)?);
     let signing_input = format!("{header_b64}.{payload_b64}");
 
-    let signing_key = jwk.signing_key()?;
-    let signature = signing_key.sign(signing_input.as_bytes());
+    let signing_key: SigningKey<Sha256> = SigningKey::new(jwk.signing_key()?);
+    let signature = signing_key
+        .try_sign(signing_input.as_bytes())
+        .map_err(|_| Error::InvalidJwt("signing failed"))?;
     let signature_b64 = b64::encode(&signature.to_bytes());
 
     Ok(format!("{signing_input}.{signature_b64}"))
 }
 
 /// Verify a compact JWS and return the parsed claims if the signature is
-/// valid against `jwk`. Does not check `exp`/`nbf`/`iss`/`aud` — that's the
+/// valid against `jwk`. Does not check `exp`/`nbf`/`iss`/`aud` -- that's the
 /// verifier's job.
 pub fn verify(jwk: &Jwk, token: &str) -> Result<Claims> {
     let mut parts = token.split('.');
@@ -52,19 +56,16 @@ pub fn verify(jwk: &Jwk, token: &str) -> Result<Claims> {
 
     let header_bytes = b64::decode(header_b64)?;
     let header: Header = serde_json::from_slice(&header_bytes)?;
-    if header.alg != "EdDSA" {
+    if header.alg != "RS256" {
         return Err(Error::InvalidJwt("unsupported alg"));
     }
 
     let signature_bytes = b64::decode(signature_b64)?;
-    if signature_bytes.len() != 64 {
-        return Err(Error::InvalidJwt("signature has wrong length"));
-    }
-    let signature = ed25519_dalek::Signature::from_slice(&signature_bytes)
+    let signature = Signature::try_from(signature_bytes.as_slice())
         .map_err(|_| Error::InvalidJwt("malformed signature"))?;
 
     let signing_input = format!("{header_b64}.{payload_b64}");
-    let verifying_key = jwk.verifying_key()?;
+    let verifying_key: VerifyingKey<Sha256> = VerifyingKey::new(jwk.verifying_key()?);
     verifying_key
         .verify(signing_input.as_bytes(), &signature)
         .map_err(|_| Error::BadSignature)?;
@@ -95,7 +96,7 @@ mod tests {
 
     #[test]
     fn sign_verify_roundtrip() {
-        let jwk = Jwk::generate_ed25519();
+        let jwk = Jwk::generate_rsa(2048);
         let token = sign(&jwk, &sample_claims()).unwrap();
         let claims = verify(&jwk.to_public(), &token).unwrap();
         assert_eq!(claims, sample_claims());
@@ -103,8 +104,8 @@ mod tests {
 
     #[test]
     fn verify_rejects_wrong_key() {
-        let jwk1 = Jwk::generate_ed25519();
-        let jwk2 = Jwk::generate_ed25519();
+        let jwk1 = Jwk::generate_rsa(2048);
+        let jwk2 = Jwk::generate_rsa(2048);
         let token = sign(&jwk1, &sample_claims()).unwrap();
         let err = verify(&jwk2.to_public(), &token).unwrap_err();
         matches!(err, Error::BadSignature);
@@ -112,7 +113,7 @@ mod tests {
 
     #[test]
     fn verify_rejects_tampered_payload() {
-        let jwk = Jwk::generate_ed25519();
+        let jwk = Jwk::generate_rsa(2048);
         let token = sign(&jwk, &sample_claims()).unwrap();
         let mut parts: Vec<&str> = token.split('.').collect();
         let tampered_payload = b64::encode(b"{\"sub\":\"attacker\"}");
@@ -124,11 +125,11 @@ mod tests {
 
     #[test]
     fn header_advertises_kid_and_alg() {
-        let jwk = Jwk::generate_ed25519();
+        let jwk = Jwk::generate_rsa(2048);
         let token = sign(&jwk, &sample_claims()).unwrap();
         let header_b64 = token.split('.').next().unwrap();
         let header: Header = serde_json::from_slice(&b64::decode(header_b64).unwrap()).unwrap();
-        assert_eq!(header.alg, "EdDSA");
+        assert_eq!(header.alg, "RS256");
         assert_eq!(header.typ, "JWT");
         assert_eq!(header.kid, jwk.kid());
     }

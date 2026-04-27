@@ -17,8 +17,8 @@ pub enum Error {
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
 
-    #[error("ed25519 error: {0}")]
-    Ed25519(#[from] ed25519_dalek::SignatureError),
+    #[error("rsa error: {0}")]
+    Rsa(#[from] rsa::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
