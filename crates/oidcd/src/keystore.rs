@@ -3,8 +3,9 @@
 //! Layout under the configured base directory (default
 //! `/var/db/keycard-osx-oidcd/keys`):
 //!
-//! - `current.json`  — full Ed25519 JWK including the private component `d`.
-//!                     Mode `0600`, owner `root`.
+//! - `current.json`  — full RSA JWK including the private components
+//!                     (`d`, `p`, `q`, `dp`, `dq`, `qi`). Mode `0600`,
+//!                     owner `root`.
 //! - `previous.json` — public-only JWK retained during the grace window so
 //!                     verifiers caching JWKS can still validate freshly
 //!                     issued tokens whose `kid` was rotated out.
@@ -70,7 +71,7 @@ impl KeyStore {
         let current = match read_json::<Jwk>(&dir.join(CURRENT_FILE))? {
             Some(jwk) => jwk,
             None => {
-                let jwk = Jwk::generate_ed25519();
+                let jwk = Jwk::generate_rsa(2048);
                 write_secret_json(&dir.join(CURRENT_FILE), &jwk)?;
                 meta.current_created_at = unix_now();
                 meta.previous_retired_at = None;
@@ -144,7 +145,7 @@ impl KeyStore {
         let retired_public = self.current.to_public();
         write_secret_json(&self.dir.join(PREVIOUS_FILE), &retired_public)?;
 
-        let new_current = Jwk::generate_ed25519();
+        let new_current = Jwk::generate_rsa(2048);
         write_secret_json(&self.dir.join(CURRENT_FILE), &new_current)?;
 
         self.previous = Some(retired_public);

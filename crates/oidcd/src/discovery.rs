@@ -123,7 +123,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|x| x == "EdDSA"));
+            .any(|x| x == "RS256"));
     }
 
     #[tokio::test]
@@ -146,8 +146,12 @@ mod tests {
         assert!(!keys.is_empty());
         for k in keys {
             assert!(k.get("d").is_none(), "jwks must not expose private d");
-            assert_eq!(k["kty"], "OKP");
-            assert_eq!(k["crv"], "Ed25519");
+            assert!(k.get("p").is_none(), "jwks must not expose prime p");
+            assert!(k.get("q").is_none(), "jwks must not expose prime q");
+            assert_eq!(k["kty"], "RSA");
+            assert!(k.get("n").is_some(), "jwks must include modulus n");
+            assert!(k.get("e").is_some(), "jwks must include exponent e");
+            assert!(k.get("crv").is_none(), "RSA jwks must not include crv");
         }
     }
 
