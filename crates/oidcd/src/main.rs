@@ -99,6 +99,16 @@ fn run_daemon(path: &PathBuf) -> Result<()> {
         kid = %keystore.current().kid(),
         "starting keycard-osx-oidcd"
     );
+    if !is_loopback_listen(&cfg.listen_http) {
+        tracing::warn!(
+            listen_http = %cfg.listen_http,
+            "HTTP listener is NOT bound to loopback; the discovery surface will be \
+             reachable directly from the network. The token endpoint is still \
+             UDS-only and unreachable from the network, but binding to a public \
+             address bypasses Tailscale's TLS termination. Consider listen_http = \
+             \"127.0.0.1:8080\"."
+        );
+    }
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -130,6 +140,12 @@ fn run_daemon(path: &PathBuf) -> Result<()> {
             },
         }
     })
+}
+
+fn is_loopback_listen(listen: &str) -> bool {
+    let host = listen.rsplit_once(':').map(|(h, _)| h).unwrap_or(listen);
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    matches!(host, "127.0.0.1" | "::1" | "localhost")
 }
 
 async fn rotation_loop(state: Arc<AppState>) -> Result<()> {
