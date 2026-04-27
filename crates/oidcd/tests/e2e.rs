@@ -84,7 +84,9 @@ previous_key_grace_hours = 24
     let _kill = KillOnDrop(&mut daemon);
 
     let openid_url = format!("http://127.0.0.1:{port}/.well-known/openid-configuration");
-    wait_for_http(&openid_url, Duration::from_secs(5));
+    // RSA-2048 keygen in debug mode can take a few seconds on first start;
+    // the daemon binds the HTTP listener after opening the keystore.
+    wait_for_http(&openid_url, Duration::from_secs(30));
 
     // Pull JWKS, like a real verifier would.
     let jwks_url = format!("http://127.0.0.1:{port}/.well-known/jwks.json");
@@ -149,7 +151,7 @@ previous_key_grace_hours = 24
     let _kill = KillOnDrop(&mut daemon);
     wait_for_http(
         &format!("http://127.0.0.1:{port}/healthz"),
-        Duration::from_secs(5),
+        Duration::from_secs(30),
     );
 
     let resp = round_trip(

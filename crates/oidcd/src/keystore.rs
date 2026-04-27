@@ -3,9 +3,8 @@
 //! Layout under the configured base directory (default
 //! `/var/db/keycard-osx-oidcd/keys`):
 //!
-//! - `current.json`  — full RSA JWK including the private components
-//!                     (`d`, `p`, `q`, `dp`, `dq`, `qi`). Mode `0600`,
-//!                     owner `root`.
+//! - `current.json`  — full RSA JWK including the private components.
+//!                     Mode `0600`, owner `root`.
 //! - `previous.json` — public-only JWK retained during the grace window so
 //!                     verifiers caching JWKS can still validate freshly
 //!                     issued tokens whose `kid` was rotated out.
