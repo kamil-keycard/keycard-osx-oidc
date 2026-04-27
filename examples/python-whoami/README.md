@@ -13,7 +13,7 @@ your Python app
 /var/run/keycard-osx-oidcd.sock
    │  daemon calls getpeereid() on the accepted fd → kernel-asserted UID
    ▼
-keycard-osx-oidcd  → signs JWT with the current Ed25519 key → returns it
+keycard-osx-oidcd  → signs JWT with the current RSA-2048 key → returns it
 ```
 
 The daemon binds the resulting JWT to the connecting process's UID; the

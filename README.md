@@ -197,7 +197,7 @@ back is bound to your process's UID regardless of which path you used.
 }
 ```
 
-Signed with Ed25519 (`alg=EdDSA`). The `kid` in the header is the RFC 7638
+Signed with RSA-2048 (`alg=RS256`). The `kid` in the header is the RFC 7638
 JWK thumbprint of the signing key. Keys rotate every 7 days; the previous
 key stays in JWKS for a 24h grace window.
 
