@@ -17,4 +17,9 @@ pub struct Claims {
     pub username: String,
     pub hostname: String,
     pub machine_id: String,
+    /// Optional caller-asserted agent identifier. v1: not authenticated;
+    /// any local process talking to the daemon may set this. Verifier policy
+    /// keying on `(sub, agent_id)` is the source of truth for per-agent scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
 }

@@ -13,6 +13,8 @@ pub enum Request {
         audience: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ttl_seconds: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent_id: Option<String>,
     },
     Whoami,
 }

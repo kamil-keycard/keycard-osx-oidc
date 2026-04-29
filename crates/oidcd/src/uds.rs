@@ -85,8 +85,8 @@ async fn handle_request(state: &Arc<AppState>, uid: u32, req: Request) -> Respon
             Ok(w) => Response::Whoami(w),
             Err(e) => Response::Error(ErrorResponse { error: e.to_string() }),
         },
-        Request::Token { audience, ttl_seconds } => {
-            match build_token(state, uid, &audience, ttl_seconds).await {
+        Request::Token { audience, ttl_seconds, agent_id } => {
+            match build_token(state, uid, &audience, ttl_seconds, agent_id).await {
                 Ok(t) => Response::Token(t),
                 Err(e) => Response::Error(ErrorResponse { error: e.to_string() }),
             }
@@ -111,6 +111,7 @@ async fn build_token(
     uid: u32,
     audience: &str,
     ttl_seconds: Option<u64>,
+    agent_id: Option<String>,
 ) -> Result<TokenResponse> {
     if audience.is_empty() {
         return Err(anyhow!("audience required"));
@@ -125,6 +126,13 @@ async fn build_token(
     if ttl == 0 {
         return Err(anyhow!("ttl_seconds must be > 0"));
     }
+
+    // v1: caller-asserted, not authenticated. Reject empty/whitespace strings
+    // so we don't mint a token with `agent_id: ""` if the caller fumbles it.
+    let agent_id = match agent_id {
+        Some(s) if s.trim().is_empty() => return Err(anyhow!("agent_id must not be empty")),
+        other => other,
+    };
 
     let username = identity::username_for_uid(uid)?;
     let now = OffsetDateTime::now_utc().unix_timestamp();
@@ -141,6 +149,7 @@ async fn build_token(
         username,
         hostname: state.hostname.clone(),
         machine_id: state.machine_id.clone(),
+        agent_id,
     };
 
     let keystore = state.keystore.read().await;

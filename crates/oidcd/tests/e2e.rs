@@ -113,6 +113,126 @@ previous_key_grace_hours = 24
     assert_eq!(claims.uid, unsafe { libc::getuid() });
     assert!(claims.sub.contains(':'));
     assert!(claims.exp > claims.iat);
+    assert!(
+        claims.agent_id.is_none(),
+        "agent_id must not appear when not requested: {:?}",
+        claims.agent_id
+    );
+}
+
+#[test]
+fn end_to_end_token_includes_agent_id_claim_when_requested() {
+    let port = pick_port();
+    let tmp = tempfile::tempdir().unwrap();
+    let sock = tmp.path().join("sock");
+    let cfg_path = tmp.path().join("config.toml");
+    std::fs::write(
+        &cfg_path,
+        format!(
+            r#"issuer = "https://e2e.example"
+listen_http = "127.0.0.1:{port}"
+listen_uds  = "{sock}"
+keys_dir    = "{keys}"
+default_ttl_seconds = 60
+max_ttl_seconds     = 600
+allowed_audiences = ["e2e-aud"]
+rotation_interval_days   = 7
+previous_key_grace_hours = 24
+"#,
+            sock = sock.display(),
+            keys = tmp.path().join("keys").display(),
+        ),
+    )
+    .unwrap();
+
+    let bin = cargo_bin("keycard-osx-oidcd");
+    let mut daemon = Command::new(&bin)
+        .arg("--config")
+        .arg(&cfg_path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn daemon");
+    let _kill = KillOnDrop(&mut daemon);
+
+    let jwks_url = format!("http://127.0.0.1:{port}/.well-known/jwks.json");
+    wait_for_http(&jwks_url, Duration::from_secs(30));
+    let jwks: Jwks = ureq::get(&jwks_url).call().unwrap().into_json().unwrap();
+
+    let resp = round_trip(
+        &sock,
+        &Request::Token {
+            audience: "e2e-aud".into(),
+            ttl_seconds: None,
+            agent_id: Some("test-agent".into()),
+        },
+    );
+    let token = match resp {
+        Response::Token(t) => t.token,
+        other => panic!("expected token response, got {other:?}"),
+    };
+
+    let header_kid = decode_header_kid(&token).expect("kid in header");
+    let jwk: &Jwk = jwks
+        .keys
+        .iter()
+        .find(|k| k.kid() == header_kid)
+        .expect("kid present in jwks");
+    let claims = jwt::verify(jwk, &token).expect("verify with jwks key");
+    assert_eq!(claims.agent_id, Some("test-agent".to_string()));
+}
+
+#[test]
+fn end_to_end_rejects_empty_agent_id() {
+    let port = pick_port();
+    let tmp = tempfile::tempdir().unwrap();
+    let sock = tmp.path().join("sock");
+    let cfg_path = tmp.path().join("config.toml");
+    std::fs::write(
+        &cfg_path,
+        format!(
+            r#"issuer = "https://e2e.example"
+listen_http = "127.0.0.1:{port}"
+listen_uds  = "{sock}"
+keys_dir    = "{keys}"
+default_ttl_seconds = 60
+max_ttl_seconds     = 600
+allowed_audiences = ["e2e-aud"]
+rotation_interval_days   = 7
+previous_key_grace_hours = 24
+"#,
+            sock = sock.display(),
+            keys = tmp.path().join("keys").display(),
+        ),
+    )
+    .unwrap();
+
+    let bin = cargo_bin("keycard-osx-oidcd");
+    let mut daemon = Command::new(&bin)
+        .arg("--config")
+        .arg(&cfg_path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn daemon");
+    let _kill = KillOnDrop(&mut daemon);
+    wait_for_http(
+        &format!("http://127.0.0.1:{port}/healthz"),
+        Duration::from_secs(30),
+    );
+
+    let resp = round_trip(
+        &sock,
+        &Request::Token {
+            audience: "e2e-aud".into(),
+            ttl_seconds: None,
+            agent_id: Some("   ".into()),
+        },
+    );
+    match resp {
+        Response::Error(e) => assert!(e.error.contains("agent_id"), "{e:?}"),
+        other => panic!("expected error, got {other:?}"),
+    }
 }
 
 #[test]
@@ -159,6 +279,7 @@ previous_key_grace_hours = 24
         &Request::Token {
             audience: "nope".into(),
             ttl_seconds: None,
+            agent_id: None,
         },
     );
     match resp {
@@ -173,6 +294,7 @@ fn mint_token(sock: &std::path::Path, audience: &str) -> String {
         &Request::Token {
             audience: audience.into(),
             ttl_seconds: None,
+            agent_id: None,
         },
     );
     match resp {

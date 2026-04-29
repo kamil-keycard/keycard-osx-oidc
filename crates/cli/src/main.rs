@@ -55,6 +55,14 @@ struct TokenArgs {
     /// Only used with `--watch`.
     #[arg(long, default_value_t = 300)]
     refresh_skew_seconds: u64,
+
+    /// Optional agent identifier. When set, the daemon injects `agent_id=<id>`
+    /// into the JWT claims. v1: the daemon does not authenticate the caller,
+    /// so the claim is only as trustworthy as the local OS user. Verifier-side
+    /// policy keying on `(sub, agent_id)` is the source of truth for per-agent
+    /// scope.
+    #[arg(long)]
+    agent: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -96,9 +104,16 @@ async fn cmd_token(socket: &Path, args: TokenArgs) -> Result<()> {
         bail!("--watch requires --output");
     }
 
+    let agent_id = match args.agent.as_deref() {
+        Some(s) if s.trim().is_empty() => bail!("--agent must not be empty"),
+        Some(s) => Some(s.to_string()),
+        None => None,
+    };
+
     let request = Request::Token {
         audience: args.audience.clone(),
         ttl_seconds: args.ttl_seconds,
+        agent_id,
     };
 
     if !args.watch {

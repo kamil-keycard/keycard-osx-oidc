@@ -91,6 +91,14 @@ mod tests {
             username: "kamil".into(),
             hostname: "kamils-mac".into(),
             machine_id: "MID".into(),
+            agent_id: None,
+        }
+    }
+
+    fn sample_claims_with_agent() -> Claims {
+        Claims {
+            agent_id: Some("agent-42".into()),
+            ..sample_claims()
         }
     }
 
@@ -132,5 +140,28 @@ mod tests {
         assert_eq!(header.alg, "RS256");
         assert_eq!(header.typ, "JWT");
         assert_eq!(header.kid, jwk.kid());
+    }
+
+    #[test]
+    fn agent_id_roundtrips_when_set() {
+        let jwk = Jwk::generate_rsa(2048);
+        let claims = sample_claims_with_agent();
+        let token = sign(&jwk, &claims).unwrap();
+        let decoded = verify(&jwk.to_public(), &token).unwrap();
+        assert_eq!(decoded.agent_id, Some("agent-42".to_string()));
+        assert_eq!(decoded, claims);
+    }
+
+    #[test]
+    fn agent_id_absent_from_payload_when_unset() {
+        let jwk = Jwk::generate_rsa(2048);
+        let token = sign(&jwk, &sample_claims()).unwrap();
+        let payload_b64 = token.split('.').nth(1).unwrap();
+        let payload: serde_json::Value =
+            serde_json::from_slice(&b64::decode(payload_b64).unwrap()).unwrap();
+        assert!(
+            payload.get("agent_id").is_none(),
+            "agent_id should be skipped when None: {payload:?}"
+        );
     }
 }
